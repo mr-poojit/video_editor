@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -90,37 +90,45 @@ export default function Editor() {
     setProgress(0);
 
     try {
-      // 1️⃣ Send video + overlays to backend
-      const res = await fetch("http://localhost:8000/api/render", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          video: video.uri,
-          overlays,
-        }),
+      const formData = new FormData();
+
+      // fix file URI
+      const videoUri = video.uri.startsWith("file://")
+        ? video.uri
+        : `file://${video.uri}`;
+
+      formData.append("file", {
+        uri: videoUri,
+        name: "video.mp4",
+        type: "video/mp4",
       });
 
-      const { jobId } = await res.json();
+      // overlays must be a string
+      formData.append("overlays", JSON.stringify(overlays));
 
-      // 2️⃣ Connect to WebSocket for progress
-      const ws = new WebSocket(
-        `ws://localhost:8000/render-progress?jobId=${jobId}`
-      );
+      // 👇 IMPORTANT: Use LAN IP if testing on physical device
+      const API_BASE =
+        Platform.OS === "android"
+          ? "http://10.0.2.2:8000"
+          : "http://127.0.0.1:8000";
 
-      ws.onmessage = (msg) => {
-        const data = JSON.parse(msg.data);
-        if (data.progress !== undefined) setProgress(data.progress);
-        if (data.status === "done") {
-          setRendering(false);
-          setOutputUrl(data.outputUrl);
-          ws.close();
-        }
-      };
+      const res = await fetch(`${API_BASE}/upload`, {
+        method: "POST",
+        body: formData,
+        headers: {
+          Accept: "application/json",
+        },
+      });
 
-      ws.onerror = (err) => {
-        console.error("WebSocket error", err);
-        setRendering(false);
-      };
+      const text = await res.text();
+      console.log("Upload response text:", text);
+
+      if (!res.ok) {
+        throw new Error(`Upload failed: ${res.status} - ${text}`);
+      }
+
+      const { job_id } = JSON.parse(text);
+      console.log("Job ID:", job_id);
     } catch (e) {
       console.error("Submit error", e);
       setRendering(false);

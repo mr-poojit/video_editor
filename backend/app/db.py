@@ -1,12 +1,17 @@
 # backend/app/db.py
-from sqlmodel import create_engine, SQLModel, Session
 import os
+from sqlmodel import SQLModel, create_engine, Session
 
-DB_FILE = os.environ.get("DB_FILE", "sqlite:///./jobs.db")
-engine = create_engine(DB_FILE, echo=False, connect_args={"check_same_thread": False} if DB_FILE.startswith("sqlite") else {})
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "database.db")
+DATABASE_URL = f"sqlite:///{DB_PATH}"
+
+# create engine (file-based sqlite)
+engine = create_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
 
 def init_db():
     SQLModel.metadata.create_all(engine)
 
 def get_session():
-    return Session(engine)
+    with Session(engine) as session:
+        yield session
